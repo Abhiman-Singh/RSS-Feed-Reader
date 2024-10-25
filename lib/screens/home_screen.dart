@@ -1,13 +1,14 @@
 // lib/screens/home_screen.dart
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import '../models/rss_feed.dart';
 import '../services/rss_service.dart';
 import '../widgets/feed_card.dart';
 import 'dart:io';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final VoidCallback onToggleTheme; // Function to toggle theme
+
+  const HomeScreen({super.key, required this.onToggleTheme});
 
   @override
   _HomeScreenState createState() => _HomeScreenState();
@@ -77,7 +78,8 @@ class _HomeScreenState extends State<HomeScreen>
                         trailing: IconButton(
                           icon: const Icon(Icons.delete, color: Colors.red),
                           onPressed: () {
-                            _deleteRssLink(_rssLinks[index]);
+                            _deleteRssLink(
+                                _rssLinks[index]); // Close dialog after delete
                           },
                         ),
                       );
@@ -176,13 +178,45 @@ class _HomeScreenState extends State<HomeScreen>
     setState(() {
       _rssLinks.remove(link);
     });
+
+    // Close the dialog after deletion
+    Navigator.pop(context);
+  }
+
+  void _refreshFeeds() {
+    // Refresh the feeds manually
+    _fetchFeeds();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Feeds refreshed!')),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('RSS Feed Reader'),
+        leading: IconButton(
+          icon: const Icon(Icons.refresh),
+          onPressed: _refreshFeeds, // Refresh feeds when tapped
+        ),
+        title: const Center(
+          child: Text(
+            'RSS Feed Reader',
+            style: TextStyle(
+              fontSize: 30, // Adjust font size as needed
+            ),
+          ),
+        ),
+        actions: [
+          IconButton(
+            icon: Icon(
+              Theme.of(context).brightness == Brightness.dark
+                  ? Icons.wb_sunny
+                  : Icons.nights_stay,
+            ),
+            onPressed: widget.onToggleTheme, // Toggle theme
+          ),
+        ],
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
