@@ -1,4 +1,3 @@
-// lib/screens/home_screen.dart
 import 'package:flutter/material.dart';
 import '../models/rss_feed.dart';
 import '../services/rss_service.dart';
@@ -6,7 +5,7 @@ import '../widgets/feed_card.dart';
 import 'dart:io';
 
 class HomeScreen extends StatefulWidget {
-  final VoidCallback onToggleTheme; // Function to toggle theme
+  final VoidCallback onToggleTheme;
 
   const HomeScreen({super.key, required this.onToggleTheme});
 
@@ -22,14 +21,16 @@ class _HomeScreenState extends State<HomeScreen>
   List<RssFeed> _audioFeeds = [];
   List<RssFeed> _videoFeeds = [];
   final TextEditingController _rssLinkController = TextEditingController();
-  List<String> _rssLinks = []; // List to hold existing RSS links
+  final TextEditingController _customNameController = TextEditingController();
+  List<String> _rssLinks = [];
+  List<String> _customNames = [];
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
     _fetchFeeds();
-    _loadExistingRssLinks(); // Load existing links when initializing
+    _loadExistingRssLinks();
   }
 
   Future<void> _fetchFeeds() async {
@@ -44,14 +45,15 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Future<void> _loadExistingRssLinks() async {
-    final file = File('rss_links.txt');
+    final rssFile = File('rss_links.txt');
+    final nameFile = File('link_name.txt');
 
-    // Check if the file exists
-    if (await file.exists()) {
-      // Read existing RSS links
-      final links = await file.readAsLines();
+    if (await rssFile.exists() && await nameFile.exists()) {
+      final links = await rssFile.readAsLines();
+      final names = await nameFile.readAsLines();
       setState(() {
-        _rssLinks = links; // Store the links in the list
+        _rssLinks = links;
+        _customNames = names;
       });
     }
   }
@@ -68,25 +70,29 @@ class _HomeScreenState extends State<HomeScreen>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Display existing RSS links with delete buttons
                 Expanded(
                   child: ListView.builder(
                     itemCount: _rssLinks.length,
                     itemBuilder: (context, index) {
                       return ListTile(
-                        title: Text(_rssLinks[index]),
+                        title: Text(
+                            '${_customNames[index]} (${_rssLinks[index]})'),
                         trailing: IconButton(
                           icon: const Icon(Icons.delete, color: Colors.red),
                           onPressed: () {
                             _deleteRssLink(
-                                _rssLinks[index]); // Close dialog after delete
+                                _rssLinks[index], _customNames[index]);
                           },
                         ),
                       );
                     },
                   ),
                 ),
-                // Input field for new RSS link
+                TextField(
+                  controller: _customNameController,
+                  decoration:
+                      const InputDecoration(labelText: 'Enter Custom Name'),
+                ),
                 TextField(
                   controller: _rssLinkController,
                   decoration:
@@ -97,9 +103,10 @@ class _HomeScreenState extends State<HomeScreen>
                   children: [
                     ElevatedButton(
                       onPressed: () async {
-                        // Save the new RSS link
-                        await _addRssLink(_rssLinkController.text.trim());
+                        await _addRssLink(_rssLinkController.text.trim(),
+                            _customNameController.text.trim());
                         _rssLinkController.clear();
+                        _customNameController.clear();
                         Navigator.pop(context);
                       },
                       child: const Text('Add'),
@@ -119,73 +126,69 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  Future<void> _addRssLink(String link) async {
-    final file = File('rss_links.txt');
+  Future<void> _addRssLink(String link, String customName) async {
+    final rssFile = File('rss_links.txt');
+    final nameFile = File('link_name.txt');
 
-    // Read existing links to check for duplicates
-    List<String> existingLinks = await file.readAsLines();
+    List<String> existingLinks =
+        await rssFile.exists() ? await rssFile.readAsLines() : [];
+    List<String> existingNames =
+        await nameFile.exists() ? await nameFile.readAsLines() : [];
 
-    // Check if the link already exists
-    if (!existingLinks.contains(link) && link.isNotEmpty) {
-      // Check if the file is empty
-      String formattedLink;
-      if (existingLinks.isEmpty) {
-        // If empty, just use the link without a newline
-        formattedLink = link;
-      } else {
-        // If not empty, prepend a newline character
-        formattedLink = '\n$link';
-      }
+    if (link.isNotEmpty &&
+        customName.isNotEmpty &&
+        !existingLinks.contains(link)) {
+      await rssFile.writeAsString(existingLinks.isEmpty ? link : '\n$link',
+          mode: FileMode.append);
+      await nameFile.writeAsString(
+          existingNames.isEmpty ? customName : '\n$customName',
+          mode: FileMode.append);
 
-      // Append the new link to the file
-      await file.writeAsString(formattedLink, mode: FileMode.append);
-
-      // Refresh the existing links
       await _loadExistingRssLinks();
-
-      // Fetch feeds again to include the new link
       _fetchFeeds();
-    } else if (link.isEmpty) {
-      // Show a message if the link is empty
+    } else if (link.isEmpty || customName.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a valid RSS link!')),
+        const SnackBar(
+            content: Text('Please enter a valid RSS link and custom name!')),
       );
     } else {
-      // Show a message if the link already exists
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('This RSS link is already present!')),
       );
     }
   }
 
-  Future<void> _deleteRssLink(String link) async {
-    final file = File('rss_links.txt');
+  Future<void> _deleteRssLink(String link, String customName) async {
+    final rssFile = File('rss_links.txt');
+    final nameFile = File('link_name.txt');
 
-    // Read all lines in the file
-    List<String> lines = await file.readAsLines();
+    List<String> links = await rssFile.readAsLines();
+    List<String> names = await nameFile.readAsLines();
 
-    // Remove the specified link
-    lines.remove(link);
+    links.remove(link);
+    names.remove(customName);
 
-    // Write the updated list back to the file
-    await file.writeAsString(lines.join('\n'));
+    await rssFile.writeAsString(links.join('\n'));
+    await nameFile.writeAsString(names.join('\n'));
 
-    // Refresh the existing links and feeds
     await _loadExistingRssLinks();
     _fetchFeeds();
-
-    // Remove the link from the displayed list immediately
     setState(() {
       _rssLinks.remove(link);
+      _customNames.remove(customName);
     });
 
-    // Close the dialog after deletion
     Navigator.pop(context);
   }
 
   void _refreshFeeds() {
-    // Refresh the feeds manually
-    _fetchFeeds();
+    setState(() {
+      _allFeeds = [];
+      _textFeeds = [];
+      _audioFeeds = [];
+      _videoFeeds = [];
+    });
+    _fetchFeeds(); // Re-fetch the feeds
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Feeds refreshed!')),
     );
@@ -197,14 +200,12 @@ class _HomeScreenState extends State<HomeScreen>
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.refresh),
-          onPressed: _refreshFeeds, // Refresh feeds when tapped
+          onPressed: _refreshFeeds,
         ),
         title: const Center(
           child: Text(
             'RSS Feed Reader',
-            style: TextStyle(
-              fontSize: 30, // Adjust font size as needed
-            ),
+            style: TextStyle(fontSize: 30),
           ),
         ),
         actions: [
@@ -214,7 +215,7 @@ class _HomeScreenState extends State<HomeScreen>
                   ? Icons.wb_sunny
                   : Icons.nights_stay,
             ),
-            onPressed: widget.onToggleTheme, // Toggle theme
+            onPressed: widget.onToggleTheme,
           ),
         ],
         bottom: TabBar(
@@ -235,7 +236,7 @@ class _HomeScreenState extends State<HomeScreen>
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _showAddRssDialog, // Show dialog to add new RSS link
+        onPressed: _showAddRssDialog,
         child: const Icon(Icons.add),
       ),
     );
